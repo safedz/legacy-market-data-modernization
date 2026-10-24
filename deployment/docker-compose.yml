@@ -1,0 +1,15 @@
+services:
+  db:
+    image: postgres:16
+    container_name: surveillance-db
+    environment:
+      POSTGRES_DB: surveillance
+      POSTGRES_USER: surveillance_user
+      POSTGRES_PASSWORD: devpassword123
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:
