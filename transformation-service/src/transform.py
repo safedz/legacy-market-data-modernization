@@ -1,71 +1,91 @@
+from datetime import datetime, timezone
 from pathlib import Path
+import sys
+
 import pandas as pd
 
-ROOT =Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
 
-INPUT_FILE =ROOT / "data" / "processed" / "ingested_messages.csv"
-OUTPUT_DIR =ROOT /"data" / "processed"
-OUTPUT_FILE = OUTPUT_DIR / "transformed_messages.csv"
-REJECTED_FILE =ROOT / "data" / "rejected" / "rejected_messages.csv"
+from common.schema import(
+    BUSINESS_COLUMNS,
+    EVENT_LABELS,
+    INGESTED_COLUMNS,
+    PIPELINE_VERSION,
+    PRICE_SCALE,
+    RAW_COLUMNS,
+    TRANSFORMED_COLUMNS,
 
-def transform_data():
-    if not INPUT_FILE.exists():
-        raise FileNotFoundError(f"Input file not found: {INPUT_FILE}")
+)
 
-    df =pd.read_csv(INPUT_FILE)
-    original_count =len(df)
+DATA_DIR = ROOT / "data"
 
-    required_columns =[
-        "source_record_number", "time", "event_type",
-        "order_id", "size" , "price", "direction"
+TRANSFORMATIONS = (
+    "trim; type_cast; timestamp_built; price_scaled;"
+    "event_labelled; duplicate_flagged"
+)
 
-    ]
+def transform_data(data_dir=None):
+    data_dir =Path(data_dir) if data_dir else DATA_DIR
+    input_file = data_dir / "processed" / "ingested_messages.csv"
+    output_file = data_dir / "processed" / "transformed_messages.csv"
 
-    missing_columns =[
-        column for column in required_columns
-        if column not in df.columns
-    ]
+    if not input_file.exists():
+        raise FileNotFoundError(f"Input file not found: {input_file}")
+    df =pd.read_csv(input_file, dtype=str, keep_default_na=False)
+    original_count= len(df)
 
-    if missing_columns:
-        raise ValueError(f"Missing columns: {missing_columns}")
-
-    numeric_columns =[
-        "time", "event_type", "order_id",
-        "size", "price", "direction"
-    ]
-
-    for column in numeric_columns:
-        df[column]=pd.to_numeric(df[column],errors="coerce")
+    missing = [c for c in INGESTED_COLUMNS if c not in df.columns]
+    if missing:
+        raise ValueError(f"Missing columns: {missing}")
 
 
-    valid =(
-        df[numeric_columns].notna().all(axis=1)
-        & (df["time"]>=0)
-        & (df["event_type"].isin([1,2,3,4,5]))
-        & (df["size"]>0)
-        & (df["price"]>=0)
-        & (df["direction"].isin([-1,1]))
+    for column in df.columns:
+        df[column] = df[column].str.strip()
+
+
+    for column in RAW_COLUMNS:
+        df[column] = pd.to_numeric(df[column], errors="coerce")
+
+    df["source_record_number"] = pd.to_numeric(
+        df["source_record_number"]
+    ) .astype("int64")
+
+    df["price_dollars"] =(df['price'] / PRICE_SCALE).round(4)
+
+    trading_day = pd.to_datetime(df["trading_date"], errors="coerce")
+    df["event_timestamp"] = trading_day + pd. to_timedelta(
+        df["time"], unit="s"
     )
 
-    rejected = df.loc[~valid].copy()
-    clean = df.loc[valid].copy()
+    df["event_label"] = df["event_type"].map(EVENT_LABELS).fillna("UNKNOWN")
 
-    clean ["price_dollars"] =clean["price"]/10000
+    df["is_duplicate"] = df.duplicated(subset=BUSINESS_COLUMNS, keep="first" )
 
-    OUTPUT_DIR.mkdir(parents=True,exist_ok=True)
-    REJECTED_FILE.parent.mkdir(parents=True,exist_ok=True)
+    df["pipeline_version"]=PIPELINE_VERSION
+    df["transformations_applied"] = TRANSFORMATIONS
+    df["transformed_at"] = datetime.now(timezone.utc).isoformat()
 
-    clean.to_csv(OUTPUT_FILE, index=False)
-    rejected.to_csv(REJECTED_FILE,index=False)
+    df =df[TRANSFORMED_COLUMNS]
+
+    if len(df) != original_count:
+        raise RuntimeError("Transformation changed the row count")
+
+    df.to_csv(output_file, index=False)
 
     print("TRANSFORMATION COMPLETED")
-    print("-"*35)
-    print("Input records:",original_count)
-    print("Valid records:", len(clean))
-    print("Rejected records:",len(rejected))
-    print("Output file:",OUTPUT_FILE)
-    print("Rejected file:", REJECTED_FILE)
+    print("-" * 40)
+    print("Input records:", original_count)
+    print("Output records:", len(df))
+    print("Duplicates flagged:", int(df["is_duplicate"].sum()))
+    print("Output file:", output_file)
+
+    return {
+        "records_in": original_count,
+        "records_out": int(len(df)),
+        "duplicates_flagged": int(df["is_duplicate"].sum()),
+    }
 
 if __name__ == "__main__":
     transform_data()
-    
+

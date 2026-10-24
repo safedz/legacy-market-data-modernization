@@ -7,3 +7,7 @@ __pycache__/
 # Virtual environments
 .venv/
 venv/
+data/lake/
+data/processed/
+data/rejected/
+validation-service/src/validate_data_backup.py

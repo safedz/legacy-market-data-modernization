@@ -23,7 +23,7 @@ print("DATASET SUMMARY")
 print("-" *40)
 print("Total records:",len(df))
 print("Total Columns:", len(df.columns))
-print("Exact dupliacte rows:", df.duplicated().sum())
+print("Exact duplicate rows:", df.duplicated().sum())
 
 print("\nEvent type counts:")
 print(df["event_type"].value_counts().sort_index())
