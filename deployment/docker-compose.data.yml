@@ -1,0 +1,42 @@
+
+services:
+  db:
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U surveillance_user -d surveillance"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  pipeline:
+    build:
+      context: ..
+      dockerfile: deployment/docker/Dockerfile.pipeline
+    user: root  
+    volumes:
+      - ../data:/app/data
+
+  loader:
+    image: postgres:16
+    depends_on:
+      db:
+        condition: service_healthy
+      pipeline:
+        condition: service_completed_successfully
+    working_dir: /app
+    volumes:
+      - ../data:/app/data:ro
+      - ../database:/app/database:ro
+    environment:
+      PGHOST: db
+      PGDATABASE: surveillance
+      PGUSER: surveillance_user
+      PGPASSWORD: devpassword123
+      PGOPTIONS: "-c client_min_messages=warning"
+    entrypoint: ["bash", "-c"]
+    command:
+      - |
+        set -e
+        psql -v ON_ERROR_STOP=1 -q -f database/staging.sql
+        psql -v ON_ERROR_STOP=1 -q -f database/load_staging.sql
+        psql -v ON_ERROR_STOP=1 -q -f database/schema/schema.sql
+        psql -v ON_ERROR_STOP=1 -f database/checks.sql

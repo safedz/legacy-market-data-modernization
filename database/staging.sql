@@ -1,0 +1,26 @@
+
+CREATE TABLE IF NOT EXISTS staging_messages (
+  source_record_number    integer,
+  time_sec                double precision,
+  event_type              double precision,
+  order_id                double precision,
+  size                    double precision,
+  price                   double precision,
+  direction               double precision,
+  source_file             text,
+  trading_date            date,
+  file_sha256             text,
+  batch_id                text,
+  ingestion_timestamp     timestamptz,
+  price_dollars           double precision,
+  event_timestamp         timestamp,
+  event_label             text,
+  is_duplicate            boolean,
+  pipeline_version        text,
+  transformations_applied text,
+  transformed_at          timestamptz,
+  reject_reason           text,
+  validation_status       text,
+  final_destination       text,
+  validated_at            timestamptz
+);
