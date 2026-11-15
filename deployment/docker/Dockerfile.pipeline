@@ -1,0 +1,22 @@
+
+FROM python:3.12-slim
+
+ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY common ./common
+COPY ingestion-service ./ingestion-service
+COPY transformation-service ./transformation-service
+COPY validation-service ./validation-service
+COPY quality-service ./quality-service
+COPY run_pipeline.py ./
+COPY data/raw ./data/raw
+
+RUN useradd --create-home pipeline && chown -R pipeline /app
+USER pipeline
+
+
+CMD ["python", "run_pipeline.py"]

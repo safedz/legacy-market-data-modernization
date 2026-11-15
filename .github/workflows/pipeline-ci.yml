@@ -1,0 +1,60 @@
+name: Pipeline CI
+
+on:
+  push:
+    branches: [main, sineli-data-pipeline, imasha-backend-devops]
+  pull_request:
+    branches: [main]
+
+jobs:
+  pipeline:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: pearl_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    env:
+      PEARL_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/pearl_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Unit, validation, quality, reject-path and database tests
+        run: python -m pytest -v
+      - name: Run the pipeline on the committed LOBSTER sample
+        run: python run_pipeline.py
+      - name: Fault injection on the real sample
+        run: python quality-service/src/fault_injection.py --input data/raw/AAPL_2012-06-21_34200000_57600000_message_1.csv
+      - name: Load the real run into PostgreSQL and run database checks
+        env:
+          MODE: local
+          PGHOST: localhost
+          PGUSER: postgres
+          PGPASSWORD: postgres
+          PGDATABASE: pearl_test
+        run: bash database/docker_load.sh
+      - name: Upload reports as a build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-reports
+          path: |
+            data/processed/*.json
+          if-no-files-found: error
+
+  docker-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -f deployment/docker/Dockerfile.pipeline -t pearl-pipeline .
+      - name: Run the image on the sample
+        run: docker run --rm pearl-pipeline
