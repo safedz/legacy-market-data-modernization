@@ -168,7 +168,7 @@ def validate_data(data_dir=None):
     }
 
     report_file.write_text(
-        json.dumps(report, indent=4, default=str), encoding="utf=8"
+        json.dumps(report, indent=4, default=str), encoding="utf-8"
     )
 
     print("VALIDATION COMPLETED")
