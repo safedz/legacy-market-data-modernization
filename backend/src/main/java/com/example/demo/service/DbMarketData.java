@@ -134,7 +134,7 @@ public class DbMarketData {
         try {
             return Long.parseLong(text.trim());
         } catch (NumberFormatException e) {
-            return null; // longer than a long: no such order
+            return null; 
         }
     }
 
