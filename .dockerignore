@@ -1,0 +1,13 @@
+.git
+.github
+backend
+frontend
+docs
+**/__pycache__
+.venv
+venv
+data/lake
+data/processed
+data/rejected
+data/sim
+*.md

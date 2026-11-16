@@ -6,9 +6,8 @@ import com.example.demo.dto.QualityReport;
 import com.example.demo.dto.RejectedRecord;
 import com.example.demo.dto.SurveillanceAlert;
 import com.example.demo.dto.Trade;
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.ObjectMapper;
 import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -25,7 +24,8 @@ import java.util.Optional;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-
+tarts, and tests still pass, when the pipeline has not been run.
+ */
 @Service
 public class MarketDataService {
 
@@ -33,15 +33,9 @@ public class MarketDataService {
 
     private final Path processedDir;
     private final Path rejectedFile;
-    private final ObjectMapper mapper = new ObjectMapper();
-    private final DbMarketData db; 
+    private final JsonMapper mapper = JsonMapper.builder().build();
+    private final DbMarketData db;
 
-   
-    private final List<SurveillanceAlert> alerts = List.of(
-            new SurveillanceAlert(1, "SPOOFING", "16135792", "HIGH",
-                    "Large order cancelled within 1 ms of submission", "2026-10-25T09:30:01"),
-            new SurveillanceAlert(2, "RAPID_CANCEL", "16140001", "MEDIUM",
-                    "Repeated submit/cancel pattern detected", "2026-10-25T09:30:05"));
 
     public MarketDataService(@Value("${pipeline.data-dir:../data}") String dataDir,
                              Optional<DbMarketData> db) {
@@ -52,56 +46,56 @@ public class MarketDataService {
     }
 
     public PipelineSummary getSummary() {
-    if (db != null) {
-        return db.getSummary();
+        if (db != null) {
+            return db.getSummary();
+        }
+        Path file = processedDir.resolve("validation_report.json");
+        if (!Files.exists(file)) {
+            return new PipelineSummary(0, 0, 0, false, "pipeline not run yet");
+        }
+        try {
+            JsonNode report = mapper.readTree(file.toFile());
+            JsonNode stages = report.path("stages");
+            long source = stages.path("ingested").path("records").asLong();
+            long loaded = stages.path("valid").path("records").asLong();
+            long rejectedCount = stages.path("rejected").path("records").asLong();
+            boolean reconciled = report.path("reconciliation_pass").asBoolean();
+            return new PipelineSummary(source, loaded, rejectedCount, reconciled,
+                    report.path("validated_at").asString());
+        } catch (JacksonException e) {
+            throw new IllegalStateException("Cannot read " + file, e);
+        }
     }
-    Path file = processedDir.resolve("validation_report.json");
-    if (!Files.exists(file)) {
-        return new PipelineSummary(0, 0, 0, false, "pipeline not run yet");
-    }
-    try {
-        JsonNode report = mapper.readTree(file.toFile());
-        JsonNode stages = report.path("stages");
-        long source = stages.path("ingested").path("records").asLong();
-        long loaded = stages.path("valid").path("records").asLong();
-        long rejectedCount = stages.path("rejected").path("records").asLong();
-        boolean reconciled = report.path("reconciliation_pass").asBoolean();
-        return new PipelineSummary(source, loaded, rejectedCount, reconciled,
-                report.path("validated_at").asString());
-    } catch (JacksonException e) {
-        throw new IllegalStateException("Cannot read " + file, e);
-    }
-}
 
-public QualityReport getQuality() {
-    Path file = processedDir.resolve("quality_report.json");
-    if (!Files.exists(file)) {
-        return new QualityReport("", "", "NOT_RUN", 0, 0, 0, 0, 0, false, 0, Map.of(), false);
+    public QualityReport getQuality() {
+        Path file = processedDir.resolve("quality_report.json");
+        if (!Files.exists(file)) {
+            return new QualityReport("", "", "NOT_RUN", 0, 0, 0, 0, 0, false, 0, Map.of(), false);
+        }
+        try {
+            JsonNode report = mapper.readTree(file.toFile());
+            JsonNode recon = report.path("orderbook_reconciliation");
+            JsonNode lifecycle = report.path("order_lifecycle");
+            Map<String, Long> violations = new LinkedHashMap<>();
+            JsonNode counts = lifecycle.path("violations");
+            counts.propertyNames().forEach(name -> violations.put(name, counts.path(name).asLong()));
+            return new QualityReport(
+                    report.path("batch_id").asString(),
+                    report.path("generated_at").asString(),
+                    recon.path("status").asString("UNKNOWN"),
+                    recon.path("checked").asLong(),
+                    recon.path("matched").asLong(),
+                    recon.path("mismatched").asLong(),
+                    recon.path("match_rate").asDouble(),
+                    recon.path("coverage").asDouble(),
+                    lifecycle.path("pass").asBoolean(),
+                    lifecycle.path("orphan_events").asLong(),
+                    violations,
+                    report.path("overall_pass").asBoolean());
+        } catch (JacksonException e) {
+            throw new IllegalStateException("Cannot read " + file, e);
+        }
     }
-    try {
-        JsonNode report = mapper.readTree(file.toFile());
-        JsonNode recon = report.path("orderbook_reconciliation");
-        JsonNode lifecycle = report.path("order_lifecycle");
-        Map<String, Long> violations = new LinkedHashMap<>();
-        JsonNode counts = lifecycle.path("violations");
-        counts.propertyNames().forEach(name -> violations.put(name, counts.path(name).asLong()));
-        return new QualityReport(
-                report.path("batch_id").asString(),
-                report.path("generated_at").asString(),
-                recon.path("status").asString("UNKNOWN"),
-                recon.path("checked").asLong(),
-                recon.path("matched").asLong(),
-                recon.path("mismatched").asLong(),
-                recon.path("match_rate").asDouble(),
-                recon.path("coverage").asDouble(),
-                lifecycle.path("pass").asBoolean(),
-                lifecycle.path("orphan_events").asLong(),
-                violations,
-                report.path("overall_pass").asBoolean());
-    } catch (JacksonException e) {
-        throw new IllegalStateException("Cannot read " + file, e);
-    }
-}
 
     public List<RejectedRecord> getRejectedRecords() {
         if (db != null) {
@@ -120,8 +114,8 @@ public QualityReport getQuality() {
     }
 
     public List<SurveillanceAlert> getAlerts() {
-        return db != null ? db.getAlerts() : alerts;
-    }
+    return db != null ? db.getAlerts() : List.of();
+}
 
     public List<Trade> searchTrades(String orderId) {
         if (db != null) {
@@ -154,8 +148,6 @@ public QualityReport getQuality() {
         return buildLineage(row);
     }
 
-    
-
     private List<LineageStep> buildLineage(Map<String, String> row) {
         boolean valid = "VALID".equals(row.get("validation_status"));
         String status = valid ? "OK" : "REJECTED";
@@ -178,6 +170,8 @@ public QualityReport getQuality() {
                         "Written to " + value(row, "final_destination") + " zone",
                         status, value(row, "validated_at")));
     }
+
+  
 
     private Path validatedFile() {
         return processedDir.resolve("validated_messages.csv");
@@ -256,7 +250,7 @@ public QualityReport getQuality() {
         return v == null ? "" : v;
     }
 
-   
+ 
     private static String wholeNumber(String text) {
         String s = text == null ? "" : text.trim();
         return s.endsWith(".0") ? s.substring(0, s.length() - 2) : s;

@@ -1,0 +1,13 @@
+# Generated market data
+data/processed/*.csv
+data/rejected/*.csv
+# Python cache files
+__pycache__/
+*.py[cod]
+# Virtual environments
+.venv/
+venv/
+data/lake/
+data/processed/
+data/rejected/
+validation-service/src/validate_data_backup.py
