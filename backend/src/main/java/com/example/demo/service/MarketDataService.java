@@ -2,11 +2,13 @@ package com.example.demo.service;
 
 import com.example.demo.dto.LineageStep;
 import com.example.demo.dto.PipelineSummary;
+import com.example.demo.dto.QualityReport;
 import com.example.demo.dto.RejectedRecord;
 import com.example.demo.dto.SurveillanceAlert;
 import com.example.demo.dto.Trade;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -15,19 +17,14 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-/**
- * Reads the Python pipeline output (CSV / JSON) from the data folder.
- *
- * Temporary bridge until the PostgreSQL layer is ready: when the database
- * exists, only the read methods below need to change.
- *
- * Files are read on each request (never in the constructor), so the app
- * still starts, and tests still pass, when the pipeline has not been run.
+tarts, and tests still pass, when the pipeline has not been run.
  */
 @Service
 public class MarketDataService {
@@ -36,22 +33,22 @@ public class MarketDataService {
 
     private final Path processedDir;
     private final Path rejectedFile;
-    private final ObjectMapper mapper = new ObjectMapper();
+    private final JsonMapper mapper = JsonMapper.builder().build();
+    private final DbMarketData db;
 
-    // Still sample data: surveillance queries need the database (Aweega's part)
-    private final List<SurveillanceAlert> alerts = List.of(
-            new SurveillanceAlert(1, "SPOOFING", "16135792", "HIGH",
-                    "Large order cancelled within 1 ms of submission", "2026-10-25T09:30:01"),
-            new SurveillanceAlert(2, "RAPID_CANCEL", "16140001", "MEDIUM",
-                    "Repeated submit/cancel pattern detected", "2026-10-25T09:30:05"));
 
-    public MarketDataService(@Value("${pipeline.data-dir:../data}") String dataDir) {
+    public MarketDataService(@Value("${pipeline.data-dir:../data}") String dataDir,
+                             Optional<DbMarketData> db) {
         Path base = Path.of(dataDir);
         this.processedDir = base.resolve("processed");
         this.rejectedFile = base.resolve("rejected").resolve("rejected_messages.csv");
+        this.db = db.orElse(null);
     }
 
     public PipelineSummary getSummary() {
+        if (db != null) {
+            return db.getSummary();
+        }
         Path file = processedDir.resolve("validation_report.json");
         if (!Files.exists(file)) {
             return new PipelineSummary(0, 0, 0, false, "pipeline not run yet");
@@ -64,13 +61,46 @@ public class MarketDataService {
             long rejectedCount = stages.path("rejected").path("records").asLong();
             boolean reconciled = report.path("reconciliation_pass").asBoolean();
             return new PipelineSummary(source, loaded, rejectedCount, reconciled,
-                    report.path("validated_at").asText());
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
+                    report.path("validated_at").asString());
+        } catch (JacksonException e) {
+            throw new IllegalStateException("Cannot read " + file, e);
+        }
+    }
+
+    public QualityReport getQuality() {
+        Path file = processedDir.resolve("quality_report.json");
+        if (!Files.exists(file)) {
+            return new QualityReport("", "", "NOT_RUN", 0, 0, 0, 0, 0, false, 0, Map.of(), false);
+        }
+        try {
+            JsonNode report = mapper.readTree(file.toFile());
+            JsonNode recon = report.path("orderbook_reconciliation");
+            JsonNode lifecycle = report.path("order_lifecycle");
+            Map<String, Long> violations = new LinkedHashMap<>();
+            JsonNode counts = lifecycle.path("violations");
+            counts.propertyNames().forEach(name -> violations.put(name, counts.path(name).asLong()));
+            return new QualityReport(
+                    report.path("batch_id").asString(),
+                    report.path("generated_at").asString(),
+                    recon.path("status").asString("UNKNOWN"),
+                    recon.path("checked").asLong(),
+                    recon.path("matched").asLong(),
+                    recon.path("mismatched").asLong(),
+                    recon.path("match_rate").asDouble(),
+                    recon.path("coverage").asDouble(),
+                    lifecycle.path("pass").asBoolean(),
+                    lifecycle.path("orphan_events").asLong(),
+                    violations,
+                    report.path("overall_pass").asBoolean());
+        } catch (JacksonException e) {
+            throw new IllegalStateException("Cannot read " + file, e);
         }
     }
 
     public List<RejectedRecord> getRejectedRecords() {
+        if (db != null) {
+            return db.getRejectedRecords();
+        }
         List<RejectedRecord> result = new ArrayList<>();
         int id = 1;
         for (Map<String, String> row : readCsv(rejectedFile, null, null, MAX_ROWS)) {
@@ -84,10 +114,13 @@ public class MarketDataService {
     }
 
     public List<SurveillanceAlert> getAlerts() {
-        return alerts;
-    }
+    return db != null ? db.getAlerts() : List.of();
+}
 
     public List<Trade> searchTrades(String orderId) {
+        if (db != null) {
+            return db.searchTrades(orderId);
+        }
         boolean all = orderId == null || orderId.isBlank();
         List<Map<String, String>> rows = all
                 ? readCsv(validatedFile(), null, null, MAX_ROWS)
@@ -100,13 +133,22 @@ public class MarketDataService {
     }
 
     public List<LineageStep> getLineage(String orderId) {
-        Map<String, String> row = firstRow(validatedFile(), orderId);
-        if (row == null) {
-            row = firstRow(rejectedFile, orderId);
+        Map<String, String> row;
+        if (db != null) {
+            row = db.lineageRow(orderId);
+        } else {
+            row = firstRow(validatedFile(), orderId);
+            if (row == null) {
+                row = firstRow(rejectedFile, orderId);
+            }
         }
         if (row == null) {
             return List.of();
         }
+        return buildLineage(row);
+    }
+
+    private List<LineageStep> buildLineage(Map<String, String> row) {
         boolean valid = "VALID".equals(row.get("validation_status"));
         String status = valid ? "OK" : "REJECTED";
         String hash = value(row, "file_sha256");
@@ -129,7 +171,7 @@ public class MarketDataService {
                         status, value(row, "validated_at")));
     }
 
-    // ---- helpers ---------------------------------------------------------
+  
 
     private Path validatedFile() {
         return processedDir.resolve("validated_messages.csv");
@@ -154,10 +196,7 @@ public class MarketDataService {
                 side);
     }
 
-    /**
-     * Streams a CSV file (the pipeline writes plain comma-separated values).
-     * If filterColumn is given, only rows whose value equals filterValue are kept.
-     */
+    
     private List<Map<String, String>> readCsv(Path file, String filterColumn, String filterValue, int limit) {
         List<Map<String, String>> rows = new ArrayList<>();
         if (!Files.exists(file)) {
@@ -211,7 +250,7 @@ public class MarketDataService {
         return v == null ? "" : v;
     }
 
-    /** "16113575.0" -> "16113575" (pandas writes floats if a column had gaps). */
+ 
     private static String wholeNumber(String text) {
         String s = text == null ? "" : text.trim();
         return s.endsWith(".0") ? s.substring(0, s.length() - 2) : s;

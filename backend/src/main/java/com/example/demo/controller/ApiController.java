@@ -2,6 +2,7 @@ package com.example.demo.controller;
 
 import com.example.demo.dto.LineageStep;
 import com.example.demo.dto.PipelineSummary;
+import com.example.demo.dto.QualityReport;
 import com.example.demo.dto.RejectedRecord;
 import com.example.demo.dto.SurveillanceAlert;
 import com.example.demo.dto.Trade;
@@ -29,6 +30,11 @@ public class ApiController {
     @GetMapping("/pipeline/summary")
     public PipelineSummary summary() {
         return service.getSummary();
+    }
+
+    @GetMapping("/quality")
+    public QualityReport quality() {
+        return service.getQuality();
     }
 
     @GetMapping("/rejected-records")
