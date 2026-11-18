@@ -1,6 +1,7 @@
 package com.example.demo.controller;
 
 import com.example.demo.dto.LineageStep;
+import com.example.demo.dto.PipelineBatch;
 import com.example.demo.dto.PipelineSummary;
 import com.example.demo.dto.QualityReport;
 import com.example.demo.dto.RejectedRecord;
@@ -32,6 +33,11 @@ public class ApiController {
         return service.getSummary();
     }
 
+    @GetMapping("/pipeline/batches")
+    public List<PipelineBatch> batches() {
+        return service.getBatches();
+    }
+
     @GetMapping("/quality")
     public QualityReport quality() {
         return service.getQuality();
@@ -53,7 +59,7 @@ public class ApiController {
         return service.getAlerts();
     }
 
-       @GetMapping("/trades")
+    @GetMapping("/trades")
     public List<Trade> trades(
             @RequestParam(required = false) @Pattern(regexp = "\\d{0,20}", message = "orderId must be numeric") String orderId,
             @RequestParam(required = false) @Pattern(regexp = "[A-Z_]{0,30}", message = "invalid eventType") String eventType,

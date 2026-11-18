@@ -1,5 +1,6 @@
 package com.example.demo.service;
 
+import com.example.demo.dto.PipelineBatch;
 import com.example.demo.dto.PipelineSummary;
 import com.example.demo.dto.RejectedRecord;
 import com.example.demo.dto.SurveillanceAlert;
@@ -14,7 +15,6 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.jdbc.BadSqlGrammarException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
-
 
 @Component
 @ConditionalOnProperty(name = "pipeline.source", havingValue = "db")
@@ -69,7 +69,6 @@ public class DbMarketData {
                 MAX_ROWS);
     }
 
-    
     public List<SurveillanceAlert> getAlerts() {
         return jdbc.query(
                 "SELECT alert_id, alert_type, order_id, severity, description, detected_at::text "
@@ -152,7 +151,23 @@ public class DbMarketData {
         }
     }
 
-    
+    public List<PipelineBatch> getBatches() {
+        return jdbc.query(
+                "SELECT batch_id, source_file, trading_date::text, file_sha256, pipeline_version, "
+                        + "ingestion_timestamp::text, source_records, loaded_records, rejected_records "
+                        + "FROM import_batches ORDER BY ingestion_timestamp DESC",
+                (rs, i) -> new PipelineBatch(
+                        text(rs.getString(1)),
+                        text(rs.getString(2)),
+                        text(rs.getString(3)),
+                        text(rs.getString(4)),
+                        text(rs.getString(5)),
+                        text(rs.getString(6)),
+                        rs.getInt(7),
+                        rs.getInt(8),
+                        rs.getInt(9)));
+    }
+
     public Map<String, String> lineageRow(String orderId) {
         Long id = parseId(orderId);
         if (id == null) {
@@ -180,7 +195,7 @@ public class DbMarketData {
         try {
             return Long.parseLong(text.trim());
         } catch (NumberFormatException e) {
-            return null; 
+            return null; // longer than a long: no such order
         }
     }
 

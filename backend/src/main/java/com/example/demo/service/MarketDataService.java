@@ -1,6 +1,7 @@
 package com.example.demo.service;
 
 import com.example.demo.dto.LineageStep;
+import com.example.demo.dto.PipelineBatch;
 import com.example.demo.dto.PipelineSummary;
 import com.example.demo.dto.QualityReport;
 import com.example.demo.dto.RejectedRecord;
@@ -112,11 +113,40 @@ public class MarketDataService {
         return result;
     }
 
-      public List<SurveillanceAlert> getAlerts() {
+    public List<PipelineBatch> getBatches() {
+        if (db != null) {
+            return db.getBatches();
+        }
+        Path file = processedDir.resolve("manifest.json");
+        if (!Files.exists(file)) {
+            return List.of();
+        }
+        try {
+            JsonNode manifest = mapper.readTree(file.toFile());
+            Path runFile = processedDir.resolve("run_manifest.json");
+            String version = Files.exists(runFile)
+                    ? mapper.readTree(runFile.toFile()).path("pipeline_version").asString("")
+                    : "";
+            PipelineSummary summary = getSummary();
+            return List.of(new PipelineBatch(
+                    manifest.path("batch_id").asString(""),
+                    manifest.path("source_file").asString(""),
+                    manifest.path("trading_date").asString(""),
+                    manifest.path("file_sha256").asString(""),
+                    version,
+                    manifest.path("ingested_at").asString(""),
+                    manifest.path("records_ingested").asInt(),
+                    (int) summary.loadedRecords(),
+                    (int) summary.rejectedRecords()));
+        } catch (JacksonException e) {
+            throw new IllegalStateException("Cannot read " + file, e);
+        }
+    }
+
+    public List<SurveillanceAlert> getAlerts() {
         return db != null ? db.getAlerts() : sampleAlerts();
     }
 
-   
     private static List<SurveillanceAlert> sampleAlerts() {
         return List.of(
                 new SurveillanceAlert(1, "SPOOFING", "100001", "HIGH",
@@ -128,6 +158,7 @@ public class MarketDataService {
                 new SurveillanceAlert(4, "PRICE_SPIKE", "100004", "LOW",
                         "Price moved more than 1% from the previous trade", "2012-06-21 11:12:30"));
     }
+
     public List<Trade> searchTrades(String orderId) {
         return searchTrades(orderId, null, null, null);
     }
@@ -210,8 +241,6 @@ public class MarketDataService {
                         status, value(row, "validated_at")));
     }
 
-  
-
     private Path validatedFile() {
         return processedDir.resolve("validated_messages.csv");
     }
@@ -235,7 +264,6 @@ public class MarketDataService {
                 side);
     }
 
-    
     private List<Map<String, String>> readCsv(Path file, String filterColumn, String filterValue, int limit) {
         List<Map<String, String>> rows = new ArrayList<>();
         if (!Files.exists(file)) {
@@ -289,7 +317,6 @@ public class MarketDataService {
         return v == null ? "" : v;
     }
 
- 
     private static String wholeNumber(String text) {
         String s = text == null ? "" : text.trim();
         return s.endsWith(".0") ? s.substring(0, s.length() - 2) : s;
