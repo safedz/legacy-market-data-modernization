@@ -5,7 +5,7 @@ DROP TABLE IF EXISTS rejected_messages;
 DROP TABLE IF EXISTS market_messages;
 DROP TABLE IF EXISTS import_batches;
 
--- 1. Batch / lineage
+
 CREATE TABLE import_batches (
   batch_id text PRIMARY KEY,
   source_file text,
