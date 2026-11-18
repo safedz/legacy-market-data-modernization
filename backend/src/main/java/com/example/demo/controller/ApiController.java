@@ -53,9 +53,12 @@ public class ApiController {
         return service.getAlerts();
     }
 
-    @GetMapping("/trades")
+       @GetMapping("/trades")
     public List<Trade> trades(
-            @RequestParam(required = false) @Pattern(regexp = "\\d{0,20}", message = "orderId must be numeric") String orderId) {
-        return service.searchTrades(orderId);
+            @RequestParam(required = false) @Pattern(regexp = "\\d{0,20}", message = "orderId must be numeric") String orderId,
+            @RequestParam(required = false) @Pattern(regexp = "[A-Z_]{0,30}", message = "invalid eventType") String eventType,
+            @RequestParam(required = false) @Pattern(regexp = "(\\d{4}-\\d{2}-\\d{2}([T ]\\d{2}:\\d{2}(:\\d{2})?)?)?", message = "from must look like 2012-06-21T09:30") String from,
+            @RequestParam(required = false) @Pattern(regexp = "(\\d{4}-\\d{2}-\\d{2}([T ]\\d{2}:\\d{2}(:\\d{2})?)?)?", message = "to must look like 2012-06-21T10:00") String to) {
+        return service.searchTrades(orderId, eventType, from, to);
     }
 }

@@ -2,6 +2,7 @@ package com.example.demo.dto;
 
 import java.util.Map;
 
+
 public record QualityReport(
         String batchId,
         String generatedAt,
@@ -16,4 +17,3 @@ public record QualityReport(
         Map<String, Long> lifecycleViolations,
         boolean overallPass) {
 }
-
