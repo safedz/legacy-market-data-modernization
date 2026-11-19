@@ -11,3 +11,17 @@ data/lake/
 data/processed/
 data/rejected/
 validation-service/src/validate_data_backup.py
+
+duckdb_extensions/
+replay_test/
+backend_files.txt
+frontend_files.txt
+repo_report.txt
+project_structure.txt
+
+duckdb_extensions/
+replay_test/
+backend_files.txt
+frontend_files.txt
+repo_report.txt
+project_structure.txt

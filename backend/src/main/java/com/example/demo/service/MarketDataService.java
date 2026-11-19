@@ -1,6 +1,7 @@
 package com.example.demo.service;
 
 import com.example.demo.dto.LineageStep;
+import com.example.demo.dto.PipelineBatch;
 import com.example.demo.dto.PipelineSummary;
 import com.example.demo.dto.QualityReport;
 import com.example.demo.dto.RejectedRecord;
@@ -24,8 +25,7 @@ import java.util.Optional;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-tarts, and tests still pass, when the pipeline has not been run.
- */
+
 @Service
 public class MarketDataService {
 
@@ -113,23 +113,93 @@ public class MarketDataService {
         return result;
     }
 
+    public List<PipelineBatch> getBatches() {
+        if (db != null) {
+            return db.getBatches();
+        }
+        Path file = processedDir.resolve("manifest.json");
+        if (!Files.exists(file)) {
+            return List.of();
+        }
+        try {
+            JsonNode manifest = mapper.readTree(file.toFile());
+            Path runFile = processedDir.resolve("run_manifest.json");
+            String version = Files.exists(runFile)
+                    ? mapper.readTree(runFile.toFile()).path("pipeline_version").asString("")
+                    : "";
+            PipelineSummary summary = getSummary();
+            return List.of(new PipelineBatch(
+                    manifest.path("batch_id").asString(""),
+                    manifest.path("source_file").asString(""),
+                    manifest.path("trading_date").asString(""),
+                    manifest.path("file_sha256").asString(""),
+                    version,
+                    manifest.path("ingested_at").asString(""),
+                    manifest.path("records_ingested").asInt(),
+                    (int) summary.loadedRecords(),
+                    (int) summary.rejectedRecords()));
+        } catch (JacksonException e) {
+            throw new IllegalStateException("Cannot read " + file, e);
+        }
+    }
+
     public List<SurveillanceAlert> getAlerts() {
-    return db != null ? db.getAlerts() : List.of();
-}
+        return db != null ? db.getAlerts() : sampleAlerts();
+    }
+
+    private static List<SurveillanceAlert> sampleAlerts() {
+        return List.of(
+                new SurveillanceAlert(1, "SPOOFING", "100001", "HIGH",
+                        "Large order submitted and cancelled within 2 seconds", "2012-06-21 09:30:02"),
+                new SurveillanceAlert(2, "LAYERING", "100002", "HIGH",
+                        "Multiple orders placed at successive price levels then removed", "2012-06-21 09:41:15"),
+                new SurveillanceAlert(3, "QUOTE_STUFFING", "100003", "MEDIUM",
+                        "Unusually high message rate from a single order", "2012-06-21 10:05:44"),
+                new SurveillanceAlert(4, "PRICE_SPIKE", "100004", "LOW",
+                        "Price moved more than 1% from the previous trade", "2012-06-21 11:12:30"));
+    }
 
     public List<Trade> searchTrades(String orderId) {
+        return searchTrades(orderId, null, null, null);
+    }
+
+    public List<Trade> searchTrades(String orderId, String eventType, String from, String to) {
         if (db != null) {
-            return db.searchTrades(orderId);
+            return db.searchTrades(orderId, eventType, from, to);
         }
+        String type = (eventType == null || eventType.isBlank()) ? null : eventType.trim();
+        String fromText = normalizeTime(from);
+        String toText = normalizeTime(to);
+        boolean filtered = type != null || fromText != null || toText != null;
+
         boolean all = orderId == null || orderId.isBlank();
+        int limit = (all && !filtered) ? MAX_ROWS : 10 * MAX_ROWS;
         List<Map<String, String>> rows = all
-                ? readCsv(validatedFile(), null, null, MAX_ROWS)
-                : readCsv(validatedFile(), "order_id", orderId.trim(), 10 * MAX_ROWS);
+                ? readCsv(validatedFile(), null, null, limit)
+                : readCsv(validatedFile(), "order_id", orderId.trim(), limit);
+
         List<Trade> result = new ArrayList<>();
         for (Map<String, String> row : rows) {
+            if (type != null && !type.equals(value(row, "event_label"))) {
+                continue;
+            }
+            String ts = value(row, "event_timestamp");
+            if (fromText != null && ts.compareTo(fromText) < 0) {
+                continue;
+            }
+            if (toText != null && ts.compareTo(toText) > 0) {
+                continue;
+            }
             result.add(toTrade(row));
+            if (result.size() >= MAX_ROWS) {
+                break;
+            }
         }
         return result;
+    }
+
+    private static String normalizeTime(String text) {
+        return (text == null || text.isBlank()) ? null : text.trim().replace('T', ' ');
     }
 
     public List<LineageStep> getLineage(String orderId) {
@@ -171,8 +241,6 @@ public class MarketDataService {
                         status, value(row, "validated_at")));
     }
 
-  
-
     private Path validatedFile() {
         return processedDir.resolve("validated_messages.csv");
     }
@@ -196,7 +264,6 @@ public class MarketDataService {
                 side);
     }
 
-    
     private List<Map<String, String>> readCsv(Path file, String filterColumn, String filterValue, int limit) {
         List<Map<String, String>> rows = new ArrayList<>();
         if (!Files.exists(file)) {
@@ -250,7 +317,6 @@ public class MarketDataService {
         return v == null ? "" : v;
     }
 
- 
     private static String wholeNumber(String text) {
         String s = text == null ? "" : text.trim();
         return s.endsWith(".0") ? s.substring(0, s.length() - 2) : s;

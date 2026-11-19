@@ -1,9 +1,12 @@
 package com.example.demo.service;
 
+import com.example.demo.dto.PipelineBatch;
 import com.example.demo.dto.PipelineSummary;
 import com.example.demo.dto.RejectedRecord;
 import com.example.demo.dto.SurveillanceAlert;
 import com.example.demo.dto.Trade;
+import java.sql.Timestamp;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -12,7 +15,6 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.jdbc.BadSqlGrammarException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
-
 
 @Component
 @ConditionalOnProperty(name = "pipeline.source", havingValue = "db")
@@ -67,7 +69,6 @@ public class DbMarketData {
                 MAX_ROWS);
     }
 
-    
     public List<SurveillanceAlert> getAlerts() {
         return jdbc.query(
                 "SELECT alert_id, alert_type, order_id, severity, description, detected_at::text "
@@ -85,17 +86,44 @@ public class DbMarketData {
     }
 
     public List<Trade> searchTrades(String orderId) {
-        boolean all = orderId == null || orderId.isBlank();
-        Long id = all ? null : parseId(orderId);
-        if (!all && id == null) {
+        return searchTrades(orderId, null, null, null);
+    }
+
+    public List<Trade> searchTrades(String orderId, String eventType, String from, String to) {
+        boolean hasOrder = orderId != null && !orderId.isBlank();
+        Long id = hasOrder ? parseId(orderId) : null;
+        if (hasOrder && id == null) {
             return List.of();
         }
-        String sql = "SELECT order_id, time_sec::text, event_label, size, price_dollars, direction "
-                + "FROM market_messages "
-                + (all ? "" : "WHERE order_id = ? ")
-                + "ORDER BY batch_id, source_record_number LIMIT ?";
-        Object[] args = all ? new Object[] {MAX_ROWS} : new Object[] {id, MAX_ROWS_FOR_ONE_ORDER};
-        return jdbc.query(sql,
+
+        StringBuilder sql = new StringBuilder(
+                "SELECT order_id, time_sec::text, event_label, size, price_dollars, direction "
+                        + "FROM market_messages WHERE 1 = 1");
+        List<Object> args = new ArrayList<>();
+
+        if (hasOrder) {
+            sql.append(" AND order_id = ?");
+            args.add(id);
+        }
+        if (eventType != null && !eventType.isBlank()) {
+            sql.append(" AND event_label = ?");
+            args.add(eventType.trim());
+        }
+        Timestamp fromTs = toTimestamp(from);
+        if (fromTs != null) {
+            sql.append(" AND event_timestamp >= ?");
+            args.add(fromTs);
+        }
+        Timestamp toTs = toTimestamp(to);
+        if (toTs != null) {
+            sql.append(" AND event_timestamp <= ?");
+            args.add(toTs);
+        }
+
+        sql.append(" ORDER BY batch_id, source_record_number LIMIT ?");
+        args.add(hasOrder ? MAX_ROWS_FOR_ONE_ORDER : MAX_ROWS);
+
+        return jdbc.query(sql.toString(),
                 (rs, i) -> new Trade(
                         text(rs.getString(1)),
                         text(rs.getString(2)),
@@ -103,10 +131,43 @@ public class DbMarketData {
                         rs.getInt(4),
                         rs.getDouble(5),
                         rs.getInt(6) == 1 ? "BUY" : "SELL"),
-                args);
+                args.toArray());
     }
 
-    
+    private static Timestamp toTimestamp(String text) {
+        if (text == null || text.isBlank()) {
+            return null;
+        }
+        String s = text.trim().replace('T', ' ');
+        if (s.length() == 10) {
+            s += " 00:00:00";
+        } else if (s.length() == 16) {
+            s += ":00";
+        }
+        try {
+            return Timestamp.valueOf(s);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
+
+    public List<PipelineBatch> getBatches() {
+        return jdbc.query(
+                "SELECT batch_id, source_file, trading_date::text, file_sha256, pipeline_version, "
+                        + "ingestion_timestamp::text, source_records, loaded_records, rejected_records "
+                        + "FROM import_batches ORDER BY ingestion_timestamp DESC",
+                (rs, i) -> new PipelineBatch(
+                        text(rs.getString(1)),
+                        text(rs.getString(2)),
+                        text(rs.getString(3)),
+                        text(rs.getString(4)),
+                        text(rs.getString(5)),
+                        text(rs.getString(6)),
+                        rs.getInt(7),
+                        rs.getInt(8),
+                        rs.getInt(9)));
+    }
+
     public Map<String, String> lineageRow(String orderId) {
         Long id = parseId(orderId);
         if (id == null) {
@@ -134,7 +195,7 @@ public class DbMarketData {
         try {
             return Long.parseLong(text.trim());
         } catch (NumberFormatException e) {
-            return null; 
+            return null; // longer than a long: no such order
         }
     }
 
