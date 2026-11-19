@@ -11,3 +11,14 @@ data/lake/
 data/processed/
 data/rejected/
 validation-service/src/validate_data_backup.py
+# Local DuckDB extensions
+duckdb_extensions/
+# Local replay test outputs
+replay_test/
+# Temporary file listings
+backend_files.txt
+frontend_files.txt
+
+# Generated frontend files
+pearl_frontend/frontend/node_modules/
+pearl_frontend/frontend/dist/
