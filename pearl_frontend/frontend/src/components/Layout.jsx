@@ -10,6 +10,8 @@ const ICONS = {
   rejected: <svg {...I}><circle cx="12" cy="12" r="9" /><path d="m5.6 5.6 12.8 12.8" /></svg>,
   lineage: <svg {...I}><circle cx="6" cy="6" r="2.5" /><circle cx="18" cy="18" r="2.5" /><path d="M8.5 6H15a3 3 0 0 1 0 6H9a3 3 0 0 0 0 6h6.5" /></svg>,
   quality: <svg {...I}><path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z" /><path d="m9 12 2 2 4-4" /></svg>,
+  lake: <svg {...I}><ellipse cx="12" cy="5" rx="8" ry="3" /><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5" /><path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6" /></svg>,
+  
 };
 const NAV = [
   ['/dashboard', 'Dashboard', 'dashboard'],
@@ -18,6 +20,7 @@ const NAV = [
   ['/rejected', 'Rejected records', 'rejected'],
   ['/lineage', 'Order lineage', 'lineage'],
   ['/quality', 'Data quality', 'quality'],
+  ['/lake', 'Data lake', 'lake'],
 ];
 
 export default function Layout({ children }) {

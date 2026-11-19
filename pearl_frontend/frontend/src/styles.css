@@ -110,3 +110,13 @@ td.num,th.num{text-align:right}
 .login form{width:100%;max-width:400px;display:flex;flex-direction:column;gap:20px}
 .login .err{background:var(--high-bg);color:var(--high);border-radius:12px;padding:12px 16px;font-size:14px}
 @media (max-width:720px){.content{padding:24px 16px}.site header,.hero,.features,.site footer{padding-left:20px;padding-right:20px}.hero h1{font-size:36px}.sidebar{flex-basis:100%}}
+
+.lake-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; }
+.lake-stat { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border: 1px solid rgba(128, 128, 128, 0.25); border-radius: 10px; }
+.lake-stat b { font-size: 24px; }
+.lake-table-wrap { overflow-x: auto; }
+.lake-table { width: 100%; border-collapse: collapse; }
+.lake-table th, .lake-table td { text-align: left; padding: 8px 12px; border-bottom: 1px solid rgba(128, 128, 128, 0.25); }
+.lake-table th { font-size: 13px; opacity: 0.75; }
+.lake-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.lake-select { padding: 8px 10px; min-width: 280px; max-width: 100%; }

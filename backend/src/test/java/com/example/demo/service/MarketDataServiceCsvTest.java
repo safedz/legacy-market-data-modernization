@@ -18,7 +18,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-/** CSV mode (no database): checks the service against small hand-made pipeline output. */
+
 class MarketDataServiceCsvTest {
 
     private static final String VALID_HEADER = "source_record_number,time,event_type,order_id,size,price,direction,"

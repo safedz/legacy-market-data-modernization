@@ -10,6 +10,7 @@ import Trades from './pages/Trades.jsx';
 import Rejected from './pages/Rejected.jsx';
 import Lineage from './pages/Lineage.jsx';
 import Quality from './pages/Quality.jsx';
+import DataLake from './pages/DataLake.jsx';
 
 const PROTECTED = [
   ['/dashboard', () => <Dashboard />],
@@ -19,6 +20,7 @@ const PROTECTED = [
   ['/lineage', () => <Lineage />],
   ['/lineage/:orderId', (p) => <Lineage key={p.orderId} orderId={p.orderId} />],
   ['/quality', () => <Quality />],
+    ['/lake', () => <DataLake />],
 ];
 
 export default function App() {
