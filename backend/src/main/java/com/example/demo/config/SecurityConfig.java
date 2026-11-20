@@ -25,11 +25,11 @@ public class SecurityConfig {
     @Bean
     SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-            .csrf(csrf -> csrf.disable()) // stateless API (Basic Auth), cookies නෑ
+            .csrf(csrf -> csrf.disable()) // stateless API (Basic Auth), no cookies
             .cors(Customizer.withDefaults())
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/actuator/health").permitAll()
+                .requestMatchers("/actuator/health", "/error").permitAll()
                 .requestMatchers("/api/**").hasAnyRole("ANALYST", "ADMIN")
                 .anyRequest().denyAll())
             .httpBasic(Customizer.withDefaults());
@@ -41,11 +41,14 @@ public class SecurityConfig {
         return new BCryptPasswordEncoder();
     }
 
+    
     @Bean
     UserDetailsService users(
             PasswordEncoder encoder,
-            @Value("${app.security.analyst-password}") String analystPassword,
-            @Value("${app.security.admin-password}") String adminPassword) {
+            @Value("${app.security.analyst-password:}") String analystPassword,
+            @Value("${app.security.admin-password:}") String adminPassword) {
+        PasswordPolicy.require("ANALYST_PASSWORD", analystPassword);
+        PasswordPolicy.require("ADMIN_PASSWORD", adminPassword);
         return new InMemoryUserDetailsManager(
                 User.withUsername("analyst").password(encoder.encode(analystPassword)).roles("ANALYST").build(),
                 User.withUsername("admin").password(encoder.encode(adminPassword)).roles("ADMIN").build());

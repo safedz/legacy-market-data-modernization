@@ -90,7 +90,7 @@ WHERE s.event_type = 1
   AND NOT s.is_duplicate AND NOT d.is_duplicate
   AND d.time_sec - s.time_sec >= 0
   AND d.time_sec - s.time_sec < 0.001
-  AND s.size >= (SELECT p90 FROM t);
+  AND s.size > (SELECT p90 FROM t);
 
 -- Rapid cancel: deleted within 50 ms, not already flagged as spoofing
 INSERT INTO surveillance_alerts (alert_type, order_id, severity, description, detected_at)

@@ -3,6 +3,7 @@
 Layout in the bucket:
     raw/<batch_id>/<message file>        original input, byte-for-byte
     curated/<batch_id>/validated_messages.parquet
+    rejected/<batch_id>/rejected_messages.csv   quarantine zone: every record that failed validation
     reports/<batch_id>/*.json            manifest, validation, quality, profile, run manifest
 Every object carries its SHA-256 as metadata and is checked after upload.
 
@@ -45,12 +46,15 @@ def plan_uploads(data_dir):
 
     items = []
     raw_copy = Path(manifest["lake_raw_copy"])
-    if not raw_copy.exists():  
+    if not raw_copy.exists():  # manifest may have been produced on another machine / container
         raw_copy = data_dir / "lake" / "raw" / batch / manifest["source_file"]
     items.append((raw_copy, f"raw/{batch}/{manifest['source_file']}"))
     curated = data_dir / "lake" / "curated" / "validated_messages.parquet"
     if curated.exists():
         items.append((curated, f"curated/{batch}/validated_messages.parquet"))
+    rejected = data_dir / "rejected" / "rejected_messages.csv"
+    if rejected.exists():
+        items.append((rejected, f"rejected/{batch}/rejected_messages.csv"))
     for name in REPORTS:
         p = data_dir / "processed" / name
         if p.exists():
@@ -75,7 +79,7 @@ def upload_batch(client, bucket, items):
 
 
 def make_client(env=os.environ):
-    import boto3 
+    import boto3  
 
     return boto3.client(
         "s3",

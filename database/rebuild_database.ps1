@@ -41,3 +41,7 @@ Cmd "\copy staging_messages FROM '$rejected' WITH (FORMAT csv, HEADER true)"
 Write-Host "== rebuilding derived tables" -ForegroundColor Cyan; Sql "database\schema\schema.sql"
 Write-Host "== database checks" -ForegroundColor Cyan;      Sql "database\checks.sql"
 Write-Host "Done. Try: database\demo_queries.sql" -ForegroundColor Green
+
+Write-Host "== extras" -ForegroundColor Cyan; Sql "database\extras.sql"
+Write-Host "== order book" -ForegroundColor Cyan; Sql "database\load_orderbook.sql"
+Write-Host "== extra checks" -ForegroundColor Cyan; Sql "database\checks_extra.sql"

@@ -1,15 +1,5 @@
 package com.example.demo.service;
 
-import com.example.demo.dto.LineageStep;
-import com.example.demo.dto.PipelineBatch;
-import com.example.demo.dto.PipelineSummary;
-import com.example.demo.dto.QualityReport;
-import com.example.demo.dto.RejectedRecord;
-import com.example.demo.dto.SurveillanceAlert;
-import com.example.demo.dto.Trade;
-import tools.jackson.core.JacksonException;
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.json.JsonMapper;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -22,8 +12,21 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+
+import com.example.demo.dto.LineageStep;
+import com.example.demo.dto.PipelineBatch;
+import com.example.demo.dto.PipelineSummary;
+import com.example.demo.dto.QualityReport;
+import com.example.demo.dto.RejectedRecord;
+import com.example.demo.dto.SurveillanceAlert;
+import com.example.demo.dto.Trade;
+
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
 
 @Service
@@ -143,8 +146,59 @@ public class MarketDataService {
         }
     }
 
-    public List<SurveillanceAlert> getAlerts() {
-        return db != null ? db.getAlerts() : sampleAlerts();
+           public List<SurveillanceAlert> getAlerts() {
+        List<SurveillanceAlert> fromFile = readAlertsCsv();
+        if (fromFile != null) {
+            return fromFile;
+        }
+        if (db != null) {
+            return db.getAlerts();
+        }
+        return sampleAlerts();
+    }
+
+    
+        private List<SurveillanceAlert> readAlertsCsv() {
+        Path file = processedDir.resolve("surveillance_alerts.csv");
+        if (!java.nio.file.Files.exists(file)) {
+            return null;
+        }
+        List<SurveillanceAlert> alerts = new java.util.ArrayList<>();
+        try {
+            List<String> lines = java.nio.file.Files.readAllLines(file, java.nio.charset.StandardCharsets.UTF_8);
+            for (int i = 1; i < lines.size(); i++) {
+                String line = lines.get(i);
+                if (line.isBlank()) {
+                    continue;
+                }
+                String[] c = line.split(",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)", -1);
+                if (c.length < 6) {
+                    continue;
+                }
+                try {
+                    alerts.add(new SurveillanceAlert(
+                            Integer.parseInt(stripQuotes(c[0])),
+                            stripQuotes(c[1]),
+                            stripQuotes(c[2]),
+                            stripQuotes(c[3]),
+                            stripQuotes(c[4]),
+                            stripQuotes(c[5])));
+                } catch (NumberFormatException e) {
+                    // skip a bad row instead of failing the whole request
+                }
+            }
+        } catch (java.io.IOException e) {
+            return null;
+        }
+        return alerts;
+    }
+
+    private static String stripQuotes(String s) {
+        String t = s.trim();
+        if (t.length() >= 2 && t.startsWith("\"") && t.endsWith("\"")) {
+            t = t.substring(1, t.length() - 1);
+        }
+        return t.replace("\"\"", "\"");
     }
 
     private static List<SurveillanceAlert> sampleAlerts() {

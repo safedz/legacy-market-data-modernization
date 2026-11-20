@@ -4,6 +4,7 @@ import StatusPill from '../components/StatusPill.jsx';
 import { Link } from '../router.jsx';
 import { formatDateTime, formatNumber, formatPercent, humanize, isPipelineReady } from '../format.js';
 
+import AnalyticsPanel from '../components/AnalyticsPanel.jsx';
 function Kpi({ label, value, note }) {
   return (
     <div className="kpi">
@@ -80,6 +81,7 @@ export default function Dashboard() {
           </DataState>
         </section>
       </div>
+       <AnalyticsPanel />
     </>
   );
 }
